@@ -1,7 +1,7 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { ConnectionConfig, IConnector } from '@dbpulse/shared';
+import { ConnectionConfig, IConnector, encrypt, decrypt } from '@dbpulse/shared';
 import { PostgresConnector } from '@dbpulse/connector-postgres';
 import { MySQLConnector } from '@dbpulse/connector-mysql';
 
@@ -10,23 +10,32 @@ export class ConnectorsService {
   private readonly logger = new Logger(ConnectorsService.name);
   private readonly supabase: SupabaseClient;
   private readonly activeConnectors = new Map<string, IConnector>();
-  private onEventCallbacks = new Map<string, (e: any) => void>();
+  private readonly onEventCallbacks = new Map<string, (e: any) => void>();
+  private readonly encSecret: string;
 
   constructor(private config: ConfigService) {
     this.supabase = createClient(
       this.config.getOrThrow('SUPABASE_URL'),
       this.config.getOrThrow('SUPABASE_SERVICE_ROLE_KEY'),
     );
+    this.encSecret = this.config.getOrThrow('CREDENTIAL_ENCRYPTION_KEY');
   }
 
   async listConnections() {
     const { data, error } = await this.supabase
-      .from('db_connections').select('*').order('created_at', { ascending: false });
+      .from('db_connections')
+      .select('id, name, engine, host, port, database_name, status, created_at')  // never select credentials
+      .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
     return data;
   }
 
   async createConnection(payload: Omit<ConnectionConfig, 'id'>) {
+    const encryptedCredentials = encrypt(
+      JSON.stringify({ username: payload.username, password: payload.password }),
+      this.encSecret,
+    );
+
     const { data, error } = await this.supabase
       .from('db_connections')
       .insert({
@@ -35,10 +44,11 @@ export class ConnectorsService {
         host: payload.host,
         port: payload.port,
         database_name: payload.database,
-        credentials: JSON.stringify({ username: payload.username, password: payload.password }),
+        credentials: encryptedCredentials,
         status: 'disconnected',
       })
-      .select().single();
+      .select('id, name, engine, host, port, database_name, status, created_at')
+      .single();
     if (error) throw new Error(error.message);
     return data;
   }
@@ -48,7 +58,8 @@ export class ConnectorsService {
       .from('db_connections').select('*').eq('id', connectionId).single();
     if (error || !data) throw new NotFoundException(`Connection ${connectionId} not found`);
 
-    const creds = JSON.parse(data.credentials ?? '{}');
+    const creds = JSON.parse(decrypt(data.credentials, this.encSecret));
+
     const config: ConnectionConfig = {
       id: data.id,
       name: data.name,
@@ -71,7 +82,8 @@ export class ConnectorsService {
     this.activeConnectors.set(connectionId, connector);
     this.onEventCallbacks.set(connectionId, onEvent);
 
-    await this.supabase.from('db_connections').update({ status: 'connected' }).eq('id', connectionId);
+    await this.supabase
+      .from('db_connections').update({ status: 'connected' }).eq('id', connectionId);
     this.logger.log(`Connector active: ${connectionId} (${config.engine})`);
   }
 
@@ -82,7 +94,8 @@ export class ConnectorsService {
     await connector.disconnect();
     this.activeConnectors.delete(connectionId);
     this.onEventCallbacks.delete(connectionId);
-    await this.supabase.from('db_connections').update({ status: 'disconnected' }).eq('id', connectionId);
+    await this.supabase
+      .from('db_connections').update({ status: 'disconnected' }).eq('id', connectionId);
     this.logger.log(`Connector removed: ${connectionId}`);
   }
 
@@ -90,7 +103,6 @@ export class ConnectorsService {
     return this.activeConnectors.get(connectionId);
   }
 
-  /** Retrieve the stored onEvent callback for reconnect reuse */
   getOnEventCallback(connectionId: string): ((e: any) => void) | undefined {
     return this.onEventCallbacks.get(connectionId);
   }

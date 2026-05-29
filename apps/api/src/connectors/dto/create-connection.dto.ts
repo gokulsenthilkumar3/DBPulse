@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateConnectionDto {
   @IsString()
@@ -10,9 +10,7 @@ export class CreateConnectionDto {
   @IsString()
   host: string;
 
-  @IsInt()
-  @Min(1)
-  @Max(65535)
+  @IsInt() @Min(1) @Max(65535)
   port: number;
 
   @IsString()
@@ -24,6 +22,6 @@ export class CreateConnectionDto {
   @IsString()
   password: string;
 
-  @IsOptional()
+  @IsOptional() @IsBoolean()
   ssl?: boolean;
 }
