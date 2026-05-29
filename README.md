@@ -10,6 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-10-red.svg)](https://nestjs.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
+[![Deploy](https://img.shields.io/badge/Deployed%20on-Vercel-black?logo=vercel)](https://dbpulse.vercel.app)
 
 </div>
 
@@ -117,6 +118,80 @@ Delivered via **Telegram · Email · Slack webhooks · In-app**
 
 ---
 
+## UI Overview
+
+### Dashboard Layout
+
+```
+┌─────────────────┬──────────────────────────────────────────────┐
+│  ⚡ DBPulse  ●  │  ⚡ Live Events  │  📊 Statistics  │  🔔 Alerts  │
+├─────────────────┼─────────────────────────┬────────────────────┤
+│                 │                         │                    │
+│  Connections    │   EventFeed             │   DiffViewer       │
+│  ─────────────  │   (live stream)         │   before / after   │
+│  🟢 prod-pg     │                         │   JSON diff        │
+│  🔴 staging-pg  │   scrollable list       │   highlighted cols │
+│  🔵 analytics   │   max 200 events        │                    │
+│                 ├─────────────────────────┴────────────────────┤
+│  + Add Conn     │   StatsPanel  /  AlertRulesPanel (on tab)    │
+│                 │                                              │
+│  ─────────────  │                                              │
+│  ⎋ Sign out     │                                              │
+└─────────────────┴──────────────────────────────────────────────┘
+```
+
+### Components
+
+| Component | Description |
+|---|---|
+| `ConnectionTree` | Lists DB connections; green dot = live, click to connect/disconnect; inline add form |
+| `EventFeed` | Real-time event stream via `useAuditStream`; click a row to load its diff; capped at 200 events |
+| `DiffViewer` | Renders before/after JSON for selected event with highlighted changed columns |
+| `StatsPanel` | 3-card analytics view: ops donut chart, top tables bar, top actors bar — fetched on tab switch |
+| `AlertRulesPanel` | Full CRUD for alert rules — condition builder, enable/disable toggle, delete |
+
+### Real-time Architecture
+
+```
+user selects connection
+  → useAuditStream subscribes to Socket.IO room conn:<id>
+    → server broadcasts audit_event
+      → component receives, prepends to list (max 200)
+        → click event → DiffViewer renders before/after diff
+```
+
+Switching connections emits `unsubscribe` to the old room before joining the new one — no cross-connection event bleed.
+
+### Auth Flow
+
+```
+LoginPage → POST /auth/login → JWT
+  → AuthContext stores token in localStorage
+  → lib/api.ts attaches Authorization: Bearer <token> to every request
+  → lib/socket.ts singleton uses same token on WebSocket handshake
+  → auto-redirect to /login on any 401 response
+```
+
+### Tailwind Design Tokens
+
+Add these custom tokens to `apps/web/tailwind.config.ts`:
+
+```ts
+theme: {
+  extend: {
+    colors: {
+      brand:           '#6366f1',
+      'brand-dark':    '#4f46e5',
+      surface:         '#0f1117',
+      'surface-card':  '#161b27',
+      'surface-border':'#1e2535',
+    },
+  },
+},
+```
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -126,9 +201,9 @@ Delivered via **Telegram · Email · Slack webhooks · In-app**
 | DB Drivers | `pg`, `mysql2`, `mssql`, `mongoose`, `better-sqlite3`, `ioredis` |
 | Diff Engine | Custom TypeScript module |
 | Audit Storage | Supabase (PostgreSQL) |
-| Real-time | Redis Pub/Sub + Server-Sent Events (SSE) |
-| Auth | Supabase Auth |
-| Deployment | Docker Compose (self-hosted), Vercel (frontend), Render (API) |
+| Real-time | Socket.IO (WebSockets) |
+| Auth | JWT (localStorage persistence) |
+| Deployment | Vercel (frontend) · Render (API) · Docker Compose (self-hosted) |
 | Notifications | Nodemailer, Telegram Bot API, Slack webhooks |
 
 ---
@@ -140,14 +215,60 @@ Delivered via **Telegram · Email · Slack webhooks · In-app**
 git clone https://github.com/gokulsenthilkumar3/DBPulse.git
 cd DBPulse
 
+# Install dependencies
+pnpm install
+
 # Copy environment variables
 cp .env.example .env
+# Edit .env with your DB credentials and JWT secret
 
-# Start with Docker Compose
+# Start with Docker Compose (recommended)
 docker compose up -d
+
+# Or run in dev mode
+pnpm dev
 
 # Access the UI
 open http://localhost:3000
+```
+
+### Install UI Dependencies
+
+```bash
+cd apps/web
+pnpm add socket.io-client clsx
+```
+
+---
+
+## Deployment
+
+### Vercel (Frontend)
+
+The `vercel.json` at the repo root configures automatic deployment:
+
+```bash
+# One-time setup
+npx vercel link
+npx vercel env add NEXT_PUBLIC_API_URL
+
+# Deploy
+npx vercel --prod
+```
+
+Or connect the GitHub repo to Vercel for automatic deploys on every push to `main`.
+
+**Required environment variables:**
+
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (e.g. `https://dbpulse-api.onrender.com`) |
+| `NEXT_PUBLIC_WS_URL` | WebSocket server URL |
+
+### Docker (Self-hosted)
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ---
@@ -157,16 +278,22 @@ open http://localhost:3000
 ```
 DBPulse/
 ├── apps/
-│   ├── web/          # Next.js 14 frontend
-│   └── api/          # NestJS backend
+│   ├── web/                  # Next.js 14 frontend
+│   │   ├── app/              # App Router pages
+│   │   ├── components/       # UI components
+│   │   ├── context/          # AuthContext
+│   │   ├── hooks/            # useAuditStream, useConnections
+│   │   └── lib/              # api.ts, socket.ts
+│   └── api/                  # NestJS backend
 ├── packages/
-│   ├── connectors/   # Per-DB driver adapters
-│   ├── diff-engine/  # Before/after diff module
-│   └── shared/       # Shared types & utilities
+│   ├── connectors/           # Per-DB driver adapters
+│   ├── diff-engine/          # Before/after diff module
+│   └── shared/               # Shared types & utilities
 ├── docs/
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   └── ROADMAP.md
+├── vercel.json
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -177,7 +304,7 @@ DBPulse/
 
 | Phase | Focus | Status |
 |---|---|---|
-| Phase 1 — MVP | PostgreSQL + MySQL, DML capture, Tree UI, Docker | 🔄 In Progress |
+| Phase 1 — MVP | PostgreSQL + MySQL, DML capture, Tree UI, Docker | ✅ Complete |
 | Phase 2 — Expansion | MSSQL + MongoDB, DDL tracking, Alerts | 📋 Planned |
 | Phase 3 — Compliance | SQLite + Redis, PDF export, Tamper-evident logs | 📋 Planned |
 | Phase 4 — SaaS | Cloud-hosted, multi-tenant, public API | 📋 Planned |
