@@ -4,6 +4,19 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuditEvent } from '@dbpulse/shared';
 import { computeDiff } from '@dbpulse/diff-engine';
 
+export interface EventQueryFilters {
+  connectionId?: string;
+  tableName?: string;
+  actor?: string;
+  operation?: string;
+  schemaName?: string;
+  search?: string;       // full-text search on raw_query / table_name / actor
+  since?: string;        // ISO timestamp
+  until?: string;        // ISO timestamp
+  limit?: number;
+  offset?: number;
+}
+
 @Injectable()
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
@@ -16,7 +29,6 @@ export class EventsService {
     );
   }
 
-  /** Persist an AuditEvent and return the saved row */
   async saveEvent(event: AuditEvent): Promise<AuditEvent> {
     const diff = computeDiff(
       event.beforeState ?? null,
@@ -39,8 +51,7 @@ export class EventsService {
         raw_query: event.rawQuery,
         event_hash: event.eventHash,
       })
-      .select()
-      .single();
+      .select().single();
 
     if (error) {
       this.logger.error(`Failed to save event: ${error.message}`);
@@ -50,28 +61,52 @@ export class EventsService {
     return this.mapRow(data);
   }
 
-  /** Query audit events with optional filters */
-  async queryEvents(filters: {
-    connectionId?: string;
-    tableName?: string;
-    actor?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<AuditEvent[]> {
+  async queryEvents(filters: EventQueryFilters): Promise<{ data: AuditEvent[]; total: number }> {
+    const limit = Math.min(filters.limit ?? 50, 200);
+    const offset = filters.offset ?? 0;
+
     let query = this.supabase
       .from('audit_events')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(filters.limit ?? 50);
+      .range(offset, offset + limit - 1);
 
     if (filters.connectionId) query = query.eq('connection_id', filters.connectionId);
-    if (filters.tableName) query = query.eq('table_name', filters.tableName);
-    if (filters.actor) query = query.eq('actor', filters.actor);
-    if (filters.offset) query = query.range(filters.offset, (filters.offset + (filters.limit ?? 50)) - 1);
+    if (filters.tableName)    query = query.eq('table_name', filters.tableName);
+    if (filters.actor)        query = query.eq('actor', filters.actor);
+    if (filters.operation)    query = query.eq('operation', filters.operation);
+    if (filters.schemaName)   query = query.eq('schema_name', filters.schemaName);
+    if (filters.since)        query = query.gte('created_at', filters.since);
+    if (filters.until)        query = query.lte('created_at', filters.until);
+    if (filters.search) {
+      query = query.or(
+        `table_name.ilike.%${filters.search}%,actor.ilike.%${filters.search}%,raw_query.ilike.%${filters.search}%`,
+      );
+    }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw new Error(error.message);
-    return (data ?? []).map(this.mapRow);
+    return { data: (data ?? []).map(this.mapRow), total: count ?? 0 };
+  }
+
+  async getEventById(id: string): Promise<AuditEvent | null> {
+    const { data, error } = await this.supabase
+      .from('audit_events').select('*').eq('id', id).single();
+    if (error) return null;
+    return this.mapRow(data);
+  }
+
+  async getEventStats(connectionId: string): Promise<Record<string, unknown>> {
+    const [byOp, byTable, byActor] = await Promise.all([
+      this.supabase.rpc('dbpulse_stats_by_operation', { p_connection_id: connectionId }),
+      this.supabase.rpc('dbpulse_stats_by_table', { p_connection_id: connectionId }),
+      this.supabase.rpc('dbpulse_stats_by_actor', { p_connection_id: connectionId }),
+    ]);
+    return {
+      byOperation: byOp.data ?? [],
+      byTable: byTable.data ?? [],
+      byActor: byActor.data ?? [],
+    };
   }
 
   private mapRow(row: any): AuditEvent {
