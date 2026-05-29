@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AuthModule } from './auth/auth.module';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { EventsModule } from './events/events.module';
 import { StreamModule } from './stream/stream.module';
@@ -11,6 +12,7 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    AuthModule,
     ConnectorsModule,
     EventsModule,
     StreamModule,

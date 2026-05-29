@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { AuditEvent } from '@dbpulse/shared';
 import { EventsService } from '../events/events.service';
+import { DedupService } from '../events/dedup.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { StreamGateway } from '../stream/stream.gateway';
 
@@ -21,6 +22,7 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private config: ConfigService,
     private eventsService: EventsService,
+    private dedupService: DedupService,
     private alertsService: AlertsService,
     private streamGateway: StreamGateway,
   ) {
@@ -45,34 +47,25 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
     await this.subscriber.quit();
   }
 
-  /** Called by connectors to push a raw event into the Redis Stream */
   async publish(event: AuditEvent): Promise<void> {
-    await this.publisher.xadd(
-      PIPELINE_QUEUE,
-      '*',
-      'payload', JSON.stringify(event),
-    );
+    await this.publisher.xadd(PIPELINE_QUEUE, '*', 'payload', JSON.stringify(event));
   }
 
-  /** Ensure the consumer group exists on the Redis Stream */
   private async ensureStreamGroup(): Promise<void> {
     try {
       await this.publisher.xgroup('CREATE', PIPELINE_QUEUE, CONSUMER_GROUP, '$', 'MKSTREAM');
     } catch (err: any) {
-      // BUSYGROUP = already exists, safe to ignore
       if (!err?.message?.includes('BUSYGROUP')) throw err;
     }
   }
 
-  /** Consumer loop — reads from Redis Stream, processes, acknowledges */
   private startConsumer() {
     const poll = async () => {
       if (!this.running) return;
       try {
         const results = await this.subscriber.xreadgroup(
           'GROUP', CONSUMER_GROUP, CONSUMER_NAME,
-          'COUNT', '10',
-          'BLOCK', '1000',
+          'COUNT', '10', 'BLOCK', '1000',
           'STREAMS', PIPELINE_QUEUE, '>',
         ) as [string, [string, string[]][]][] | null;
 
@@ -82,31 +75,42 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
               const payloadIdx = fields.indexOf('payload');
               if (payloadIdx === -1) continue;
               const event: AuditEvent = JSON.parse(fields[payloadIdx + 1]);
-
-              await this.process(event);
-              await this.subscriber.xack(PIPELINE_QUEUE, CONSUMER_GROUP, msgId);
+              await this.process(msgId, event);
             }
           }
         }
       } catch (err) {
         this.logger.error('Pipeline consumer error', err);
       }
-
       if (this.running) this.pollTimer = setTimeout(poll, 0);
     };
-
     poll();
   }
 
-  /** Core processing pipeline for a single event */
-  private async process(event: AuditEvent): Promise<void> {
-    // 1. Persist to Supabase
-    const saved = await this.eventsService.saveEvent(event);
+  private async process(msgId: string, event: AuditEvent): Promise<void> {
+    // 1. Deduplication check
+    if (event.eventHash) {
+      const isNew = await this.dedupService.isNew(event.eventHash);
+      if (!isNew) {
+        await this.subscriber.xack(PIPELINE_QUEUE, CONSUMER_GROUP, msgId);
+        return;
+      }
+    }
 
-    // 2. Evaluate alert rules
-    await this.alertsService.evaluate(saved);
-
-    // 3. Broadcast to WebSocket clients
-    this.streamGateway.broadcast(saved);
+    try {
+      // 2. Persist
+      const saved = await this.eventsService.saveEvent(event);
+      // 3. Alert evaluation
+      await this.alertsService.evaluate(saved);
+      // 4. Real-time broadcast
+      this.streamGateway.broadcast(saved);
+      // 5. Ack only after successful processing
+      await this.subscriber.xack(PIPELINE_QUEUE, CONSUMER_GROUP, msgId);
+    } catch (err) {
+      this.logger.error(`Failed to process event ${event.id}: ${err}`);
+      // Release dedup lock so the event can be retried on redeliver
+      if (event.eventHash) await this.dedupService.release(event.eventHash);
+      // Do NOT ack — Redis will redeliver after PEL timeout
+    }
   }
 }
