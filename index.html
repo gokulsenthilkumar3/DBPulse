@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DBPulse — Universal Database Activity Intelligence</title>
+  <meta name="description" content="Real-time audit logs, row-level diffs, and cross-database observability. Know who did what, to which data, on which table, and when." />
+  <meta property="og:title" content="DBPulse — Database Activity Intelligence" />
+  <meta property="og:description" content="Real-time audit logs · Row-level diffs · Cross-database observability" />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand: #6366f1;
+      --brand-dark: #4f46e5;
+      --brand-glow: rgba(99,102,241,0.25);
+      --surface: #0f1117;
+      --surface-card: #161b27;
+      --surface-border: #1e2535;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #475569;
+      --emerald: #34d399;
+      --rose: #f87171;
+      --amber: #fbbf24;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--surface);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem;
+      height: 60px;
+      background: rgba(15,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-weight: 700; font-size: 1rem; color: var(--text-primary);
+    }
+    .nav-brand-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: rgba(99,102,241,0.2);
+      border: 1px solid rgba(99,102,241,0.35);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem;
+    }
+    .nav-links { display: flex; align-items: center; gap: 1.5rem; }
+    .nav-links a { font-size: 0.85rem; color: var(--text-secondary); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-cta {
+      background: var(--brand); color: #fff;
+      padding: 0.45rem 1.1rem; border-radius: 8px;
+      font-size: 0.85rem; font-weight: 600;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .nav-cta:hover { background: var(--brand-dark); box-shadow: 0 0 16px var(--brand-glow); }
+
+    /* HERO */
+    .hero {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 7rem 2rem 5rem;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 400px;
+      background: radial-gradient(ellipse, rgba(99,102,241,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25);
+      color: #a5b4fc; padding: 0.3rem 0.9rem; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 500; margin-bottom: 1.8rem;
+    }
+    .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 6px var(--emerald); }
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 700; line-height: 1.15;
+      letter-spacing: -0.03em;
+      max-width: 720px; margin-bottom: 1.4rem;
+    }
+    h1 span { color: var(--brand); }
+    .hero-sub {
+      font-size: 1.1rem; color: var(--text-secondary);
+      max-width: 520px; margin-bottom: 2.5rem; line-height: 1.7;
+    }
+    .hero-actions { display: flex; gap: 0.9rem; flex-wrap: wrap; justify-content: center; }
+    .btn-primary {
+      background: var(--brand); color: #fff;
+      padding: 0.75rem 1.8rem; border-radius: 10px;
+      font-size: 0.95rem; font-weight: 600;
+      transition: background 0.2s, box-shadow 0.2s;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn-primary:hover { background: var(--brand-dark); box-shadow: 0 0 24px var(--brand-glow); }
+    .btn-secondary {
+      background: var(--surface-card); color: var(--text-secondary);
+      border: 1px solid var(--surface-border);
+      padding: 0.75rem 1.8rem; border-radius: 10px;
+      font-size: 0.95rem; font-weight: 500;
+      transition: border-color 0.2s, color 0.2s;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn-secondary:hover { border-color: #475569; color: var(--text-primary); }
+
+    /* TERMINAL PREVIEW */
+    .terminal-wrap { width: 100%; max-width: 780px; margin: 4rem auto 0; padding: 0 1rem; }
+    .terminal {
+      background: #0a0d14; border: 1px solid var(--surface-border);
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.08);
+    }
+    .terminal-bar {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 1rem; background: #0d1018;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-red { background: #ff5f57; } .dot-yellow { background: #febc2e; } .dot-green { background: #28c840; }
+    .terminal-title { margin-left: auto; margin-right: auto; font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+    .terminal-body { padding: 1.4rem 1.6rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 2; }
+    .t-dim { color: #374151; }
+    .t-gray { color: #6b7280; }
+    .t-green { color: var(--emerald); }
+    .t-red { color: var(--rose); }
+    .t-yellow { color: var(--amber); }
+    .t-brand { color: #a5b4fc; }
+    .t-white { color: #e2e8f0; }
+    .t-cursor { display: inline-block; width: 8px; height: 1em; background: var(--brand); vertical-align: text-bottom; animation: blink 1.1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* SECTIONS */
+    section { padding: 5rem 2rem; }
+    .container { max-width: 1060px; margin: 0 auto; }
+    .section-label {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      color: #a5b4fc; font-size: 0.75rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+    .section-sub { color: var(--text-secondary); font-size: 1rem; max-width: 500px; margin-bottom: 3rem; }
+
+    /* FEATURES GRID */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .feature-card {
+      background: var(--surface-card); border: 1px solid var(--surface-border);
+      border-radius: 14px; padding: 1.6rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover { border-color: rgba(99,102,241,0.3); transform: translateY(-2px); }
+    .feature-icon { font-size: 1.6rem; margin-bottom: 0.9rem; }
+    .feature-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .feature-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; }
+
+    /* DB BADGES */
+    .db-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+    .db-badge {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface-card); border: 1px solid var(--surface-border);
+      border-radius: 8px; padding: 0.5rem 1rem;
+      font-size: 0.82rem; font-weight: 500; color: var(--text-secondary);
+    }
+
+    /* DIFF PREVIEW */
+    .diff-preview {
+      background: #0a0d14; border: 1px solid var(--surface-border);
+      border-radius: 14px; overflow: hidden; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem; max-width: 600px;
+    }
+    .diff-header {
+      padding: 0.6rem 1rem; background: #0d1018;
+      border-bottom: 1px solid var(--surface-border);
+      font-size: 0.7rem; color: var(--text-muted);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .diff-row { display: flex; align-items: center; padding: 0.25rem 1rem; gap: 0.5rem; }
+    .diff-row.del { background: rgba(248,113,113,0.06); color: var(--rose); }
+    .diff-row.add { background: rgba(52,211,153,0.06); color: var(--emerald); }
+    .diff-row.neutral { color: var(--text-muted); }
+    .diff-sign { width: 12px; shrink: 0; font-weight: 700; }
+
+    /* STACK */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem; margin-top: 2rem;
+    }
+    .stack-item {
+      background: var(--surface-card); border: 1px solid var(--surface-border);
+      border-radius: 10px; padding: 1rem;
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    .stack-layer { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+    .stack-tech { font-size: 0.88rem; font-weight: 600; }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 5rem 2rem;
+      background: linear-gradient(180deg, transparent, rgba(99,102,241,0.04), transparent);
+      border-top: 1px solid var(--surface-border);
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center; padding: 2rem;
+      font-size: 0.8rem; color: var(--text-muted);
+      border-top: 1px solid var(--surface-border);
+    }
+    footer a { color: var(--text-muted); transition: color 0.2s; }
+    footer a:hover { color: var(--text-secondary); }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-links { display: none; }
+      section { padding: 3.5rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-brand-icon">⚡</div>
+    DBPulse
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#databases">Databases</a>
+    <a href="#stack">Stack</a>
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse" target="_blank">GitHub</a>
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse" target="_blank" class="nav-cta">View Source →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    Open Source · MIT License
+  </div>
+  <h1>Database activity,<br /><span>finally visible</span></h1>
+  <p class="hero-sub">
+    Real-time audit logs, row-level diffs, and cross-database observability — all in one dashboard. Know who changed what, on which table, and exactly when.
+  </p>
+  <div class="hero-actions">
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse" class="btn-primary" target="_blank">⭐ Star on GitHub</a>
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse#quick-start" class="btn-secondary" target="_blank">Quick Start →</a>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="terminal-title">DBPulse — Live Event Feed</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-dim">conn:prod-pg &gt;</span> <span class="t-green">● CONNECTED</span> <span class="t-gray">· streaming audit events</span></div>
+        <div style="margin-top:0.5rem">
+          <span class="t-gray">14:32:11</span>&nbsp;
+          <span class="t-yellow">UPDATE</span>&nbsp;
+          <span class="t-brand">users</span>&nbsp;
+          <span class="t-gray">· row #4821 · actor:</span>&nbsp;
+          <span class="t-white">gokul@company.com</span>
+        </div>
+        <div>
+          <span class="t-gray">14:32:09</span>&nbsp;
+          <span class="t-green">INSERT</span>&nbsp;
+          <span class="t-brand">orders</span>&nbsp;
+          <span class="t-gray">· row #9203 · actor:</span>&nbsp;
+          <span class="t-white">api_service</span>
+        </div>
+        <div>
+          <span class="t-gray">14:31:55</span>&nbsp;
+          <span class="t-red">DELETE</span>&nbsp;
+          <span class="t-brand">sessions</span>&nbsp;
+          <span class="t-gray">· 3 rows · actor:</span>&nbsp;
+          <span class="t-white">cleanup_job</span>
+        </div>
+        <div>
+          <span class="t-gray">14:30:00</span>&nbsp;
+          <span class="t-yellow">ALTER TABLE</span>&nbsp;
+          <span class="t-brand">products</span>&nbsp;
+          <span class="t-gray">· ADD COLUMN discount_code · actor:</span>&nbsp;
+          <span class="t-white">migration_runner</span>
+        </div>
+        <div style="margin-top:0.5rem"><span class="t-dim">▎</span> <span class="t-cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">⚡ Features</div>
+    <h2>Everything you need to audit your databases</h2>
+    <p class="section-sub">From real-time event streaming to row-level diffs and configurable alert rules.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Live Event Stream</div>
+        <div class="feature-desc">Socket.IO-powered real-time feed of every INSERT, UPDATE, DELETE, and DDL change. Capped at 200 events with instant clear.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <div class="feature-title">Row-level Diff Viewer</div>
+        <div class="feature-desc">Every UPDATE exposes a before/after JSON diff with highlighted changed columns — like git diff but for your database rows.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">Statistics Panel</div>
+        <div class="feature-desc">Operations donut chart, top tables bar, and top actors bar. Instant snapshot of what's happening across your connection.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔔</div>
+        <div class="feature-title">Alert Rules Engine</div>
+        <div class="feature-desc">Full CRUD alert rules with a condition builder. Trigger on TRUNCATE, bulk DELETE, schema changes, or unauthorized access.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-title">Multi-DB Support</div>
+        <div class="feature-desc">PostgreSQL, MySQL, MSSQL, MongoDB, SQLite, and Redis — all in one unified connection tree sidebar.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-title">JWT Auth</div>
+        <div class="feature-desc">Secure login with token persistence in localStorage. Every API call and WebSocket handshake auto-attaches the Bearer token.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DIFF DEMO -->
+<section id="diff" style="padding-top: 0;">
+  <div class="container">
+    <div style="display: flex; gap: 3rem; align-items: center; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 260px;">
+        <div class="section-label">🔍 Diff Viewer</div>
+        <h2>See exactly what changed</h2>
+        <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.7; margin-top: 0.5rem;">
+          Every UPDATE event captures the full before and after state. Click any row in the live feed to instantly see a highlighted column diff — no query logs, no guesswork.
+        </p>
+      </div>
+      <div class="diff-preview" style="flex: 1; min-width: 260px; max-width: 480px;">
+        <div class="diff-header">⚡ UPDATE · users · row #4821</div>
+        <div class="diff-row neutral"><span class="diff-sign"> </span> id: 4821</div>
+        <div class="diff-row del"><span class="diff-sign">−</span> email: old@domain.com</div>
+        <div class="diff-row add"><span class="diff-sign">+</span> email: new@domain.com</div>
+        <div class="diff-row neutral"><span class="diff-sign"> </span> name: "Gokul"</div>
+        <div class="diff-row del"><span class="diff-sign">−</span> updated_at: null</div>
+        <div class="diff-row add"><span class="diff-sign">+</span> updated_at: 2026-05-29T14:32:11Z</div>
+        <div class="diff-row neutral"><span class="diff-sign"> </span> role: "admin"</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DATABASES -->
+<section id="databases">
+  <div class="container">
+    <div class="section-label">🗄️ Databases</div>
+    <h2>Universal database support</h2>
+    <p class="section-sub">Connect to any combination of databases and monitor them all from a single dashboard.</p>
+    <div class="db-grid">
+      <div class="db-badge">🐘 PostgreSQL</div>
+      <div class="db-badge">🐬 MySQL / MariaDB</div>
+      <div class="db-badge">🪟 Microsoft SQL Server</div>
+      <div class="db-badge">🍃 MongoDB</div>
+      <div class="db-badge">🪶 SQLite</div>
+      <div class="db-badge">⚡ Redis</div>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section id="stack">
+  <div class="container">
+    <div class="section-label">🛠️ Tech Stack</div>
+    <h2>Built on a modern, reliable foundation</h2>
+    <p class="section-sub">Monorepo architecture with Turborepo, fully typed end-to-end.</p>
+    <div class="stack-grid">
+      <div class="stack-item"><div class="stack-layer">Frontend</div><div class="stack-tech">Next.js 14</div></div>
+      <div class="stack-item"><div class="stack-layer">Language</div><div class="stack-tech">TypeScript</div></div>
+      <div class="stack-item"><div class="stack-layer">Styling</div><div class="stack-tech">Tailwind CSS</div></div>
+      <div class="stack-item"><div class="stack-layer">Backend</div><div class="stack-tech">NestJS</div></div>
+      <div class="stack-item"><div class="stack-layer">Real-time</div><div class="stack-tech">Socket.IO</div></div>
+      <div class="stack-item"><div class="stack-layer">Storage</div><div class="stack-tech">Supabase</div></div>
+      <div class="stack-item"><div class="stack-layer">Deploy</div><div class="stack-tech">Vercel + Render</div></div>
+      <div class="stack-item"><div class="stack-layer">Monorepo</div><div class="stack-tech">Turborepo</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="section-label" style="justify-content: center;">🚀 Open Source</div>
+  <h2 style="margin-bottom: 0.75rem;">Ready to see your database activity?</h2>
+  <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 0.95rem;">Self-host in minutes with Docker Compose, or deploy to Vercel + Render for free.</p>
+  <div style="display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap;">
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse" class="btn-primary" target="_blank">⭐ Star on GitHub</a>
+    <a href="https://github.com/gokulsenthilkumar3/DBPulse#quick-start" class="btn-secondary" target="_blank">📖 Read the Docs</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>Built by <a href="https://github.com/gokulsenthilkumar3" target="_blank">Gokul Senthilkumar</a> · MIT License · <a href="https://github.com/gokulsenthilkumar3/DBPulse" target="_blank">GitHub</a></p>
+</footer>
+
+</body>
+</html>
