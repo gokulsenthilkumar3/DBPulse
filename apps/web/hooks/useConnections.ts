@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { api } from '@/lib/api';
 
 export interface Connection {
   id: string;
@@ -19,15 +18,17 @@ export function useConnections() {
 
   const refresh = async () => {
     setLoading(true);
-    const res = await fetch(`${API_URL}/api/connections`);
-    const data = await res.json();
-    setConnections(data);
-    setLoading(false);
+    api.listConnections()
+      .then(setConnections)
+      .finally(() => setLoading(false));
   };
 
   const toggle = async (id: string, currentStatus: string) => {
-    const method = currentStatus === 'connected' ? 'DELETE' : 'POST';
-    await fetch(`${API_URL}/api/connections/${id}/connect`, { method });
+    if (currentStatus === 'connected') {
+      await api.disconnectDb(id);
+    } else {
+      await api.connectDb(id);
+    }
     await refresh();
   };
 

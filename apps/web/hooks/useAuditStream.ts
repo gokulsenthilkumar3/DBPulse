@@ -1,33 +1,47 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { getSocket } from '@/lib/socket';
 import type { AuditEvent } from '@dbpulse/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const MAX_EVENTS = 200;
 
 export function useAuditStream(connectionId: string | null) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const prevConnId = useRef<string | null>(null);
 
   useEffect(() => {
-    const socket = io(`${API_URL}/stream`, { transports: ['websocket'] });
-    socketRef.current = socket;
+    const socket = getSocket();
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('audit_event', (event: AuditEvent) => {
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+    const onEvent = (event: AuditEvent) => {
       if (connectionId && event.connectionId !== connectionId) return;
       setEvents((prev) => [event, ...prev].slice(0, MAX_EVENTS));
-    });
+    };
 
-    if (connectionId) socket.emit('subscribe', connectionId);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('audit_event', onEvent);
+    if (socket.connected) setConnected(true);
 
-    return () => { socket.disconnect(); };
+    // Leave previous room, join new
+    if (prevConnId.current && prevConnId.current !== connectionId) {
+      socket.emit('unsubscribe', prevConnId.current);
+    }
+    if (connectionId) {
+      socket.emit('subscribe', connectionId);
+      prevConnId.current = connectionId;
+    }
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('audit_event', onEvent);
+    };
   }, [connectionId]);
 
-  return { events, connected };
+  const clearEvents = () => setEvents([]);
+  return { events, connected, clearEvents };
 }
